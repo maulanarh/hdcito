@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daftar HD Cito</title>
+<style>
+:root{--bg:#f4f6f8;--card:#fff;--tx:#1b2430;--mu:#6b7785;--br:#dde3ea;--pr:#0f766e;--rd:#c62828;--am:#b45309;--gr:#15803d}
+@media(prefers-color-scheme:dark){:root{--bg:#10161c;--card:#1a232c;--tx:#e8eef4;--mu:#93a1b0;--br:#2c3946;--pr:#2dd4bf;--rd:#f87171;--am:#fbbf24;--gr:#4ade80}}
+*{box-sizing:border-box}body{margin:0;font:15px/1.45 system-ui,sans-serif;background:var(--bg);color:var(--tx)}
+header{background:var(--pr);color:#fff;padding:14px 16px}
+@media(prefers-color-scheme:dark){header{color:#06231f}}
+header h1{margin:0;font-size:18px}header small{opacity:.85}
+main{max-width:720px;margin:0 auto;padding:12px}
+nav{display:flex;gap:6px;margin-bottom:12px}
+nav button{flex:1;padding:9px;border:1px solid var(--br);background:var(--card);color:var(--tx);border-radius:8px;font:inherit;cursor:pointer}
+nav button.on{background:var(--pr);color:#fff;border-color:var(--pr)}
+@media(prefers-color-scheme:dark){nav button.on{color:#06231f}}
+.card{background:var(--card);border:1px solid var(--br);border-radius:10px;padding:12px;margin-bottom:10px}
+label{display:block;font-size:13px;color:var(--mu);margin:8px 0 3px}
+input,textarea,select{width:100%;padding:9px;border:1px solid var(--br);border-radius:7px;background:var(--bg);color:var(--tx);font:inherit}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.btn{padding:10px 14px;border:0;border-radius:8px;background:var(--pr);color:#fff;font:inherit;font-weight:600;cursor:pointer}
+@media(prefers-color-scheme:dark){.btn{color:#06231f}}
+.btn.sm{padding:6px 10px;font-size:13px}.btn.o{background:transparent;border:1px solid var(--br);color:var(--tx)}
+.btn.rd{background:var(--rd);color:#fff}.btn.gr{background:var(--gr);color:#fff}
+.btn.full{width:100%;margin-top:12px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.stat{background:var(--card);border:1px solid var(--br);border-radius:10px;padding:10px;text-align:center}
+.stat b{display:block;font-size:26px}.stat span{font-size:12px;color:var(--mu)}
+.top{display:flex;gap:10px;align-items:flex-start}
+.no{min-width:34px;height:34px;border-radius:50%;background:var(--pr);color:#fff;display:grid;place-items:center;font-weight:700}
+@media(prefers-color-scheme:dark){.no{color:#06231f}}
+.nm{font-weight:700;font-size:16px}.mu{color:var(--mu);font-size:13px}
+.tag{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;font-weight:600;border:1px solid currentColor}
+.t-antri{color:var(--am)}.t-proses{color:var(--pr)}.t-selesai{color:var(--gr)}.t-batal{color:var(--mu)}.t-telat{color:var(--rd)}
+.ho{background:var(--bg);border-radius:7px;padding:8px;margin:8px 0;white-space:pre-wrap}
+.act{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.empty{text-align:center;color:var(--mu);padding:28px 0}
+#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:9px 16px;border-radius:8px;display:none;z-index:9}
+.warn{background:#fff3cd;color:#664d03;padding:8px 12px;border-radius:8px;font-size:13px;margin-bottom:10px}
+</style>
+</head>
+<body>
+<header style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+<div><h1>🩸 Daftar HD Cito</h1><small id="sub"></small></div>
+<button id="bell" onclick="toggleSuara()" style="display:none;border:1px solid currentColor;background:transparent;color:inherit;border-radius:8px;padding:6px 10px;font:inherit;cursor:pointer"></button>
+</header>
+<main>
+<div id="warn"></div>
+<nav id="nav"></nav>
+<div id="app"></div>
+</main>
+<div id="toast"></div>
+
+<script>
+/* ============ PENGATURAN (isi sebelum upload ke GitHub) ============ */
+const CFG = {
+  // URL Firebase Realtime Database, contoh: "https://nama-proyek-default-rtdb.asia-southeast1.firebasedatabase.app"
+  FIREBASE_URL: "",
+  // Web API Key Firebase (Project settings > General). Jika diisi, aplikasi memakai login email+password dan PIN diabaikan.
+  API_KEY: "",
+  // URL Web App Google Apps Script (lihat apps-script.gs) untuk pencatatan ke spreadsheet
+  SHEET_URL: "",
+  // Saran isian (bebas diubah)
+  RUANGAN: ["IGD","ICU","HCU","Melati","Mawar","Anggrek","Dahlia","Flamboyan","Pentol Pati"],
+  DOKTER_HD: ["dr. ... , Sp.PD-KGH","dr. ... , Sp.PD-KGH"],
+  POLL_MS: 4000,
+  // PIN per tampilan. Kosongkan ("") jika tidak ingin memakai PIN untuk tampilan itu.
+  PIN: { ruangan: "", hd: "1234", dokter: "" }
+};
+/* ================================================================== */
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const demo = !CFG.FIREBASE_URL;
+const useAuth = !!CFG.API_KEY && !demo;
+const ROLES = {ruangan:"Ruangan", hd:"HD", dokter:"Dokter"};
+let role = useAuth ? null : ((location.hash.slice(1) in ROLES) ? location.hash.slice(1) : "ruangan");
+let tab = role === "ruangan" ? "daftar" : "monitor";
+let auth = null;
+try{ auth = JSON.parse(localStorage.getItem("auth")||"null"); }catch(e){}
+let data = {}, editing = false;
+
+/* ---------- Firebase Authentication (REST, tanpa SDK) ---------- */
+const ERR = {INVALID_LOGIN_CREDENTIALS:"Email atau password salah",EMAIL_NOT_FOUND:"Email atau password salah",INVALID_PASSWORD:"Email atau password salah",
+  USER_DISABLED:"Akun dinonaktifkan",TOO_MANY_ATTEMPTS_TRY_LATER:"Terlalu banyak percobaan, coba lagi nanti"};
+function saveAuth(a){ auth = a; localStorage.setItem("auth", JSON.stringify(a)); }
+async function token(){
+  if(!auth) return null;
+  if(Date.now() > auth.exp - 60000){
+    try{
+      const r = await fetch("https://securetoken.googleapis.com/v1/token?key="+CFG.API_KEY,{method:"POST",
+        headers:{"Content-Type":"application/x-www-form-urlencoded"},
+        body:"grant_type=refresh_token&refresh_token="+encodeURIComponent(auth.refreshToken)});
+      const j = await r.json(); if(!r.ok) throw 0;
+      saveAuth({...auth,idToken:j.id_token,refreshToken:j.refresh_token,exp:Date.now()+(+j.expires_in)*1000});
+    }catch(e){ logout(); return null; }
+  }
+  return auth.idToken;
+}
+const au = async () => useAuth ? "?auth=" + encodeURIComponent(await token()) : "";
+async function loadRole(){
+  const t = await token(); if(!t) return;
+  const r = await fetch(CFG.FIREBASE_URL+"/roles/"+auth.uid+".json?auth="+encodeURIComponent(t));
+  const v = r.ok ? await r.json() : null;
+  role = ROLES[v] ? v : null; tab = role==="ruangan" ? "daftar" : "monitor";
+}
+function loginView(){
+  return `<div class="card" id="pin"><label>Email</label><input id="em" type="email" autocomplete="username">
+  <label>Password</label><input id="pw" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()">
+  <button class="btn full" onclick="login()">Masuk</button>
+  <p class="mu">Akun dibuat oleh admin HD. Belum punya akun? Hubungi admin.</p></div>`;
+}
+async function login(){
+  const email = $("#em").value.trim(), password = $("#pw").value;
+  if(!email||!password){ toast("Isi email dan password"); return; }
+  try{
+    const r = await fetch("https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key="+CFG.API_KEY,{method:"POST",
+      headers:{"Content-Type":"application/json"},body:JSON.stringify({email,password,returnSecureToken:true})});
+    const j = await r.json();
+    if(!r.ok){ const k=(j.error&&j.error.message||"").split(" ")[0]; toast(ERR[k]||"Gagal masuk"); return; }
+    saveAuth({idToken:j.idToken,refreshToken:j.refreshToken,exp:Date.now()+(+j.expiresIn)*1000,uid:j.localId,email:j.email});
+    await loadRole();
+    if(!role){ toast("Akun belum diberi peran. Hubungi admin."); logout(); return; }
+    seen = null; await refresh(); render();
+  }catch(e){ toast("Gagal masuk, cek koneksi"); }
+}
+function logout(){ auth=null; role=null; data={}; seen=null; localStorage.removeItem("auth"); render(); }
+
+/* ---------- Penyimpanan: Firebase REST (atau localStorage jika demo) ---------- */
+const api = {
+  async load(){
+    if(demo){ try{return JSON.parse(localStorage.getItem("cito")||"{}")}catch(e){return {}} }
+    const r = await fetch(CFG.FIREBASE_URL + "/cito.json" + await au()); if(!r.ok) throw new Error("load"); return (await r.json()) || {};
+  },
+  async add(o){
+    if(demo){ const d = await this.load(); const id = "k"+Date.now(); d[id]=o; localStorage.setItem("cito",JSON.stringify(d)); return id; }
+    const r = await fetch(CFG.FIREBASE_URL + "/cito.json" + await au(),{method:"POST",body:JSON.stringify(o)});
+    if(!r.ok) throw new Error("add"); return (await r.json()).name;
+  },
+  async patch(id,o){
+    if(demo){ const d = await this.load(); d[id]={...d[id],...o}; localStorage.setItem("cito",JSON.stringify(d)); return; }
+    const r = await fetch(CFG.FIREBASE_URL + "/cito/"+id+".json" + await au(),{method:"PATCH",body:JSON.stringify(o)});
+    if(!r.ok) throw new Error("patch");
+  }
+};
+function logSheet(aksi, o){
+  if(!CFG.SHEET_URL) return;
+  fetch(CFG.SHEET_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain"},body:JSON.stringify({aksi,...o})}).catch(()=>{});
+}
+
+/* ---------- Util waktu ---------- */
+const pad = n => String(n).padStart(2,"0");
+function localInput(d=new Date()){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())+"T"+pad(d.getHours())+":"+pad(d.getMinutes()); }
+function hm(iso){ if(!iso) return "-"; const d=new Date(iso); return isNaN(d)?"-":pad(d.getHours())+":"+pad(d.getMinutes()); }
+function isToday(iso){ const d=new Date(iso), n=new Date(); return d.toDateString()===n.toDateString(); }
+function telat(p){ // menit selisih antara jam advice HD dokter dan waktu daftar
+  if(!p.jamAdvice||!p.createdAt) return 0;
+  return Math.round((new Date(p.createdAt)-new Date(p.jamAdvice))/60000);
+}
+function toast(m){ const t=$("#toast"); t.textContent=m; t.style.display="block"; setTimeout(()=>t.style.display="none",2200); }
+
+/* ---------- Data turunan ---------- */
+function list(){
+  return Object.entries(data).map(([id,p])=>({id,...p}))
+    .filter(p => ["antri","proses"].includes(p.status) || isToday(p.updatedAt||p.createdAt));
+}
+function queue(){
+  return list().filter(p=>["antri","proses"].includes(p.status))
+    .sort((a,b)=> new Date(a.jamAcc||a.createdAt) - new Date(b.jamAcc||b.createdAt));
+}
+
+/* ---------- Tampilan ---------- */
+function nav(){
+  const tabs = needPin() ? [] : role==="ruangan" ? [["daftar","Daftar Pasien"],["monitor","Monitor"]] : [["monitor","Monitor Cito"]];
+  $("#nav").innerHTML = tabs.map(([k,l])=>`<button class="${tab===k?"on":""}" onclick="tab='${k}';render()">${l}</button>`).join("") + (useAuth && !needPin() ? `<button style="flex:0 0 auto" onclick="logout()">Keluar</button>` : "");
+  $("#sub").textContent = role ? "Tampilan: " + ROLES[role] + (auth ? " · " + auth.email : "") : "Silakan masuk";
+  const b = $("#bell"); b.style.display = (role==="ruangan" || needPin()) ? "none" : "block";
+  b.textContent = soundOn ? "🔔 Suara aktif" : "🔕 Suara mati";
+  $("#warn").innerHTML = demo ? `<div class="warn">Mode demo: data hanya tersimpan di browser ini. Isi <b>FIREBASE_URL</b> di file untuk memakai database bersama.</div>` : "";
+}
+function formView(){
+  const nowIn = localInput();
+  return `<div class="card">
+  <label>Ruangan *</label><input id="f_ruangan" list="dl_r" placeholder="Asal ruangan"><datalist id="dl_r">${CFG.RUANGAN.map(r=>`<option value="${esc(r)}">`).join("")}</datalist>
+  <label>Nama pasien *</label><input id="f_nama" autocomplete="off">
+  <label>No. RM *</label><input id="f_rm" inputmode="numeric" autocomplete="off">
+  <label>Catatan / hand over singkat</label><textarea id="f_cat" rows="3" placeholder="Diagnosa, indikasi cito, akses, TTV, dll"></textarea>
+  <div class="row"><div><label>Jam konsul ke dokter *</label><input id="f_konsul" type="datetime-local" value="${nowIn}"></div>
+  <div><label>Jam advice HD dokter *</label><input id="f_advice" type="datetime-local" value="${nowIn}"></div></div>
+  <div class="row"><div><label>Jam ACC HD *</label><input id="f_acc" type="datetime-local" value="${nowIn}"></div>
+  <div><label>Dokter HD *</label><input id="f_dok" list="dl_d" placeholder="Nama dokter"><datalist id="dl_d">${CFG.DOKTER_HD.map(r=>`<option value="${esc(r)}">`).join("")}</datalist></div></div>
+  <button class="btn full" id="btnKirim" onclick="submitForm()">Daftarkan ke HD</button>
+  <p class="mu">Tidak perlu telepon, cukup isi form. Telepon hanya untuk konfirmasi.</p></div>`;
+}
+function monitorView(){
+  const all = list(), q = queue();
+  const selesai = all.filter(p=>p.status==="selesai").length;
+  const proses = q.filter(p=>p.status==="proses").length;
+  let h = `<div class="stats"><div class="stat"><b>${q.length-proses}</b><span>Antri</span></div><div class="stat"><b>${proses}</b><span>Proses</span></div><div class="stat"><b>${selesai}</b><span>Selesai hari ini</span></div></div>`;
+  if(!q.length) h += `<div class="empty">Tidak ada pasien cito yang aktif.</div>`;
+  q.forEach((p,i)=> h += cardHtml(p,i+1));
+  const done = all.filter(p=>["selesai","batal"].includes(p.status)).sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt));
+  if(done.length){ h += `<h3 class="mu">Selesai / batal hari ini</h3>`; done.forEach(p=> h += cardHtml(p,"✓")); }
+  return h;
+}
+function cardHtml(p,no){
+  const t = telat(p);
+  const tl = t>30 ? `<span class="tag t-telat">Daftar telat ${t} mnt</span>` : "";
+  const hd = role==="hd";
+  let act = "";
+  if(hd){
+    act = `<div class="act">
+      ${p.status==="antri"?`<button class="btn sm" onclick="setStatus('${p.id}','proses')">Mulai HD</button>`:""}
+      ${p.status==="proses"?`<button class="btn sm gr" onclick="setStatus('${p.id}','selesai')">Selesai</button>`:""}
+      ${["antri","proses"].includes(p.status)?`<button class="btn sm rd" onclick="setStatus('${p.id}','batal')">Batal</button>`:`<button class="btn sm o" onclick="setStatus('${p.id}','antri')">Kembalikan ke antrean</button>`}
+    </div>
+    <label>Catatan HD</label><textarea rows="2" onfocus="editing=true" onblur="editing=false" onchange="saveNote('${p.id}',this.value)">${esc(p.catatanHd||"")}</textarea>`;
+  } else if(p.catatanHd){ act = `<div class="mu">Catatan HD: ${esc(p.catatanHd)}</div>`; }
+  return `<div class="card"><div class="top"><div class="no">${no}</div><div style="flex:1">
+    <div class="nm">${esc(p.nama)}</div>
+    <div class="mu">RM ${esc(p.rm)} · ${esc(p.ruangan)} · ${esc(p.dokterHd)}</div>
+    <div style="margin:4px 0"><span class="tag t-${p.status}">${p.status.toUpperCase()}</span> ${tl}</div></div></div>
+    ${p.catatan?`<div class="ho">${esc(p.catatan)}</div>`:""}
+    <div class="mu">Konsul ${hm(p.jamKonsul)} · Advice HD ${hm(p.jamAdvice)} · ACC HD ${hm(p.jamAcc)} · Didaftarkan ${hm(p.createdAt)}</div>
+    ${act}</div>`;
+}
+function render(){
+  if(editing) return;
+  nav();
+  if(needPin()){ if(!$("#pin")) $("#app").innerHTML = pinView(); return; }
+  $("#app").innerHTML = (role==="ruangan" && tab==="daftar") ? formView() : monitorView();
+}
+
+/* ---------- PIN ---------- */
+const needPin = () => useAuth ? !(auth && role) : (!!CFG.PIN[role] && localStorage.getItem("pin_"+role) !== CFG.PIN[role]);
+function pinView(){
+  if(useAuth) return loginView();
+  return `<div class="card"><label>Masukkan PIN tampilan ${ROLES[role]}</label>
+  <input id="pin" type="password" inputmode="numeric" autocomplete="off" onkeydown="if(event.key==='Enter')cekPin()">
+  <button class="btn full" onclick="cekPin()">Masuk</button></div>`;
+}
+function cekPin(){
+  if($("#pin").value === CFG.PIN[role]){ localStorage.setItem("pin_"+role, CFG.PIN[role]); unlockAudio(); refresh().then(render); }
+  else { toast("PIN salah"); $("#pin").value = ""; }
+}
+
+/* ---------- Suara & notifikasi pasien cito baru ---------- */
+let seen = null, ac = null, soundOn = localStorage.getItem("suara") !== "off";
+const baseTitle = document.title;
+function unlockAudio(){ try{ ac = ac || new (window.AudioContext||window.webkitAudioContext)(); if(ac.state==="suspended") ac.resume(); }catch(e){} }
+document.addEventListener("click", () => { unlockAudio(); document.title = baseTitle; });
+function toggleSuara(){ soundOn = !soundOn; localStorage.setItem("suara", soundOn?"on":"off"); unlockAudio(); if(soundOn) beep(); nav(); }
+function beep(){
+  if(!soundOn || !ac) return;
+  [880,1175,880].forEach((f,i)=>{
+    const o=ac.createOscillator(), g=ac.createGain(), t=ac.currentTime+i*0.25;
+    o.frequency.value=f; o.connect(g); g.connect(ac.destination);
+    g.gain.setValueAtTime(0.3,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.22);
+    o.start(t); o.stop(t+0.23);
+  });
+  if(navigator.vibrate) navigator.vibrate([200,100,200]);
+}
+function checkNew(){
+  const ids = Object.keys(data);
+  if(seen === null){ seen = new Set(ids); return; }
+  const baru = ids.filter(i => !seen.has(i) && data[i].status==="antri");
+  ids.forEach(i => seen.add(i));
+  if(baru.length && role!=="ruangan"){
+    beep();
+    toast("Cito baru: " + data[baru[0]].nama + (baru.length>1 ? " (+"+(baru.length-1)+")" : ""));
+    document.title = "🔴 Cito baru! " + baseTitle;
+  }
+}
+
+/* ---------- Aksi ---------- */
+async function submitForm(){
+  const v = id => $("#"+id).value.trim();
+  const o = {ruangan:v("f_ruangan"),nama:v("f_nama"),rm:v("f_rm"),catatan:v("f_cat"),
+    jamKonsul:v("f_konsul")&&new Date(v("f_konsul")).toISOString(),
+    jamAdvice:v("f_advice")&&new Date(v("f_advice")).toISOString(),
+    jamAcc:v("f_acc")&&new Date(v("f_acc")).toISOString(),dokterHd:v("f_dok")};
+  if(!o.ruangan||!o.nama||!o.rm||!o.dokterHd||!o.jamKonsul||!o.jamAdvice||!o.jamAcc){ toast("Lengkapi isian bertanda *"); return; }
+  const btn=$("#btnKirim"); btn.disabled=true; btn.textContent="Mengirim...";
+  const now = new Date().toISOString();
+  Object.assign(o,{status:"antri",catatanHd:"",createdAt:now,updatedAt:now});
+  try{
+    const id = await api.add(o); logSheet("daftar",{id,...o});
+    toast("Terdaftar ✓"); await refresh(); tab="monitor"; render();
+  }catch(e){ toast("Gagal mengirim, cek koneksi"); btn.disabled=false; btn.textContent="Daftarkan ke HD"; }
+}
+async function setStatus(id,status){
+  const u = {status,updatedAt:new Date().toISOString()};
+  data[id] = {...data[id],...u}; render();
+  try{ await api.patch(id,u); logSheet("status",{id,...data[id]}); }catch(e){ toast("Gagal menyimpan"); }
+}
+async function saveNote(id,val){
+  data[id].catatanHd = val;
+  try{ await api.patch(id,{catatanHd:val,updatedAt:new Date().toISOString()}); logSheet("catatan",{id,...data[id]}); toast("Catatan tersimpan"); }catch(e){ toast("Gagal menyimpan"); }
+}
+async function refresh(){
+  if(needPin()) return;
+  try{ data = await api.load(); checkNew(); }catch(e){}
+}
+
+window.addEventListener("hashchange",()=>{ location.reload(); });
+(async()=>{ if(useAuth && auth){ try{ await loadRole(); }catch(e){} } await refresh(); render(); })();
+setInterval(async()=>{
+  await refresh();
+  if(tab==="daftar" || needPin()) return; // jangan menghapus isian form yang sedang diketik
+  render();
+}, CFG.POLL_MS);
+</script>
+</body>
+</html>
